@@ -14,6 +14,9 @@ use skim::prelude::*;
 #[derive(Parser)]
 #[command(version, about)]
 struct Args {
+    /// File path to open directly
+    path: Option<PathBuf>,
+
     /// Command to open the file (receives absolute path as argument)
     #[arg(short, long, default_value = "gh mdp")]
     command: String,
@@ -109,6 +112,12 @@ fn interactive(command: &str, files: &[(PathBuf, Metadata)]) -> Result<()> {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+
+    if let Some(path) = &args.path {
+        ensure!(path.exists(), "Path not found: {}", path.display());
+        return open(&args.command, path);
+    }
+
     let files = markdown_files(&plans_dir()?)?;
 
     if args.interactive {
