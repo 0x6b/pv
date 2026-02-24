@@ -1,6 +1,6 @@
 [package]
 name = "pv"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "View the markdown file in `~/.claude/plans/` with the given command. By default, it opens the most recent file."
 
