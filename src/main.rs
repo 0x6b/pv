@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, ensure};
 use clap::Parser;
+use colored::Colorize;
 use dirs::home_dir;
 use jiff::{Timestamp, tz::TimeZone};
 use skim::prelude::*;
@@ -82,9 +83,10 @@ fn interactive(command: &str, files: &[(PathBuf, Metadata)]) -> Result<()> {
         .map(|(path, meta)| {
             let name = path.file_name().unwrap_or_default().to_string_lossy();
             format!(
-                "\x1b[34m{}\x1b[0m \x1b[1m{}\x1b[0m \x1b[2m{name}\x1b[0m",
-                format_time(meta),
-                first_line(path),
+                "{} {} {}",
+                format_time(meta).blue(),
+                first_line(path).bold(),
+                name.dimmed(),
             )
         })
         .collect::<Vec<_>>()
