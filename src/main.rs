@@ -63,10 +63,10 @@ fn format_time(meta: &Metadata) -> String {
 }
 
 fn open(command: &str, path: &Path) -> Result<()> {
-    let mut parts = command.split_whitespace();
-    let program = parts.next().context("Empty command")?;
+    let parts = shlex::split(command).context("Invalid command syntax")?;
+    let (program, args) = parts.split_first().context("Empty command")?;
     let status = Command::new(program)
-        .args(parts)
+        .args(args)
         .arg(path)
         .status()
         .with_context(|| format!("Failed to execute: {command}"))?;
