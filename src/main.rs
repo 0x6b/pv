@@ -109,7 +109,7 @@ fn interactive(command: &str, files: &[(PathBuf, Metadata)]) -> Result<()> {
 
     let paths: Vec<_> = files.iter().map(|(p, _)| p.clone()).collect();
     let options = SkimOptionsBuilder::default()
-        .height("50%".to_string())
+        .height("100%".to_string())
         .multi(false)
         .reverse(true)
         .preview_fn(PreviewCallback::from(move |items: Vec<Arc<dyn SkimItem>>| {
