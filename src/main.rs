@@ -1,6 +1,6 @@
 use std::{
-    fs::{Metadata, read_dir, read_to_string},
-    io::Cursor,
+    fs::{Metadata, read_dir},
+    io::{BufRead, BufReader, Cursor},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -48,9 +48,9 @@ fn markdown_files(dir: &Path) -> Result<Vec<(PathBuf, Metadata)>> {
 }
 
 fn first_line(path: &Path) -> String {
-    read_to_string(path)
+    std::fs::File::open(path)
         .ok()
-        .and_then(|c| c.lines().next().map(str::to_string))
+        .and_then(|f| BufReader::new(f).lines().next()?.ok())
         .unwrap_or_default()
 }
 
