@@ -54,11 +54,21 @@ fn markdown_files(dir: &Path) -> Result<Vec<(PathBuf, Metadata)>> {
     Ok(files)
 }
 
-fn first_line(path: &Path) -> String {
-    std::fs::File::open(path)
-        .ok()
-        .and_then(|f| BufReader::new(f).lines().next()?.ok())
-        .unwrap_or_default()
+fn title(path: &Path) -> String {
+    let file = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return String::new(),
+    };
+    let mut first_non_empty = None;
+    for line in BufReader::new(file).lines().take(10).map_while(Result::ok) {
+        if let Some(heading) = line.strip_prefix("# ") {
+            return heading.to_string();
+        }
+        if first_non_empty.is_none() && !line.is_empty() && line != "---" {
+            first_non_empty = Some(line);
+        }
+    }
+    first_non_empty.unwrap_or_default()
 }
 
 fn format_time(meta: &Metadata) -> String {
@@ -91,7 +101,7 @@ fn interactive(command: &str, files: &[(PathBuf, Metadata)]) -> Result<()> {
             format!(
                 "{} {} {}",
                 format_time(meta).blue(),
-                first_line(path).bold(),
+                title(path).bold(),
                 name.dimmed(),
             )
         })
