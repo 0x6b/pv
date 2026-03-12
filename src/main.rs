@@ -22,6 +22,10 @@ struct Args {
     #[arg(short, long, default_value = "gh mdp")]
     command: String,
 
+    /// Base directory to search for markdown files (default: ~/.claude/plans, or PV_DIR env var)
+    #[arg(short, long, env = "PV_DIR")]
+    dir: Option<PathBuf>,
+
     /// Interactive mode: list files with fzf-style selection
     #[arg(short, long)]
     interactive: bool,
@@ -120,7 +124,8 @@ fn main() -> Result<()> {
         return open(&args.command, path);
     }
 
-    let files = markdown_files(&plans_dir()?)?;
+    let base = args.dir.unwrap_or(plans_dir()?);
+    let files = markdown_files(&base)?;
 
     if args.interactive {
         interactive(&args.command, &files)

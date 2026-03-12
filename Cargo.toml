@@ -6,7 +6,7 @@ description = "View the markdown file in `~/.claude/plans/` with the given comma
 
 [dependencies]
 anyhow = "1.0"
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.5", features = ["derive", "env"] }
 skim = { version = "3.2", default-features = false }
 jiff = "0.2"
 colored = "3.0"
