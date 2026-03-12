@@ -1,5 +1,5 @@
 use std::{
-    fs::{Metadata, read_dir},
+    fs::Metadata,
     io::{BufRead, BufReader, Cursor},
     path::{Path, PathBuf},
     process::Command,
@@ -11,6 +11,7 @@ use colored::Colorize;
 use dirs::home_dir;
 use jiff::{Timestamp, tz::TimeZone};
 use skim::prelude::*;
+use walkdir::WalkDir;
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -38,12 +39,13 @@ fn plans_dir() -> Result<PathBuf> {
 }
 
 fn markdown_files(dir: &Path) -> Result<Vec<(PathBuf, Metadata)>> {
-    let mut files: Vec<_> = read_dir(dir)
-        .with_context(|| format!("Failed to read directory: {}", dir.display()))?
+    ensure!(dir.is_dir(), "Directory not found: {}", dir.display());
+    let mut files: Vec<_> = WalkDir::new(dir)
+        .into_iter()
         .filter_map(Result::ok)
         .filter_map(|e| {
-            let path = e.path();
-            let meta = e.metadata().ok()?;
+            let path = e.into_path();
+            let meta = path.metadata().ok()?;
             (path.extension().is_some_and(|ext| ext == "md") && meta.is_file())
                 .then_some((path, meta))
         })
