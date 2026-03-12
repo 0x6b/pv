@@ -98,10 +98,19 @@ fn interactive(command: &str, files: &[(PathBuf, Metadata)]) -> Result<()> {
         .collect::<Vec<_>>()
         .join("\n");
 
+    let paths: Vec<_> = files.iter().map(|(p, _)| p.clone()).collect();
     let options = SkimOptionsBuilder::default()
         .height("50%".to_string())
         .multi(false)
         .reverse(true)
+        .preview_fn(PreviewCallback::from(move |items: Vec<Arc<dyn SkimItem>>| {
+            items
+                .first()
+                .and_then(|item| paths.get(item.get_index()))
+                .and_then(|path| std::fs::read_to_string(path).ok())
+                .map(|content| content.lines().map(String::from).collect())
+                .unwrap_or_default()
+        }))
         .build()
         .map_err(|e| anyhow!("Failed to build skim options: {e}"))?;
 
