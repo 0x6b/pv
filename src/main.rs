@@ -39,7 +39,6 @@ fn plans_dir() -> Result<PathBuf> {
 }
 
 fn markdown_files(dir: &Path) -> Result<Vec<(PathBuf, Metadata)>> {
-    ensure!(dir.is_dir(), "Directory not found: {}", dir.display());
     let mut files: Vec<_> = WalkDir::new(dir)
         .into_iter()
         .filter_map(Result::ok)
@@ -145,7 +144,29 @@ fn main() -> Result<()> {
         return open(&args.command, path);
     }
 
-    let base = args.dir.unwrap_or(plans_dir()?);
+    let base = match args.dir {
+        Some(dir) => {
+            ensure!(
+                dir.is_dir(),
+                "Directory not found: {}. Please specify a valid directory with --dir.",
+                dir.display()
+            );
+            dir
+        }
+        None => {
+            let dir = plans_dir()?;
+            if !dir.is_dir() {
+                std::fs::create_dir_all(&dir).with_context(|| {
+                    format!(
+                        "Plans directory {} does not exist and could not be created. \
+                         Use --dir to specify a different directory.",
+                        dir.display()
+                    )
+                })?;
+            }
+            dir
+        }
+    };
     let files = markdown_files(&base)?;
 
     if args.interactive {
