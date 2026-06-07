@@ -1,5 +1,8 @@
 use std::{
-    fs::Metadata,
+    cmp::Reverse,
+    collections::HashMap,
+    fmt::Write as _,
+    fs::{File, Metadata, create_dir_all, read_to_string},
     io::{BufRead, BufReader, Cursor},
     path::{Path, PathBuf},
     process::Command,
@@ -10,6 +13,7 @@ use clap::Parser;
 use colored::Colorize;
 use dirs::home_dir;
 use jiff::{Timestamp, tz::TimeZone};
+use shlex::split;
 use skim::prelude::*;
 use walkdir::WalkDir;
 
@@ -49,14 +53,13 @@ fn markdown_files(dir: &Path) -> Result<Vec<(PathBuf, Metadata)>> {
                 .then_some((path, meta))
         })
         .collect();
-    files.sort_by(|a, b| b.1.modified().ok().cmp(&a.1.modified().ok()));
+    files.sort_by_key(|b| Reverse(b.1.modified().ok()));
     Ok(files)
 }
 
 fn title(path: &Path) -> String {
-    let file = match std::fs::File::open(path) {
-        Ok(f) => f,
-        Err(_) => return String::new(),
+    let Ok(file) = File::open(path) else {
+        return String::new();
     };
     let mut first_non_empty = None;
     for line in BufReader::new(file).lines().take(10).map_while(Result::ok) {
@@ -74,12 +77,14 @@ fn format_time(meta: &Metadata) -> String {
     meta.modified()
         .ok()
         .and_then(|t| Timestamp::try_from(t).ok())
-        .map(|ts| ts.to_zoned(TimeZone::system()).strftime("%Y-%m-%d %H:%M").to_string())
-        .unwrap_or_else(|| "unknown".into())
+        .map_or_else(
+            || "unknown".into(),
+            |ts| ts.to_zoned(TimeZone::system()).strftime("%Y-%m-%d %H:%M").to_string(),
+        )
 }
 
 fn open(command: &str, path: &Path) -> Result<()> {
-    let parts = shlex::split(command).context("Invalid command syntax")?;
+    let parts = split(command).context("Invalid command syntax")?;
     let (program, args) = parts.split_first().context("Empty command")?;
     let status = Command::new(program)
         .args(args)
@@ -93,21 +98,18 @@ fn open(command: &str, path: &Path) -> Result<()> {
 fn interactive(command: &str, files: &[(PathBuf, Metadata)]) -> Result<()> {
     ensure!(!files.is_empty(), "No markdown files found");
 
-    let input = files
-        .iter()
-        .map(|(path, meta)| {
-            let name = path.file_name().unwrap_or_default().to_string_lossy();
-            format!(
-                "{} {} {}",
-                format_time(meta).blue(),
-                title(path).bold(),
-                name.dimmed(),
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+    // Map items back to paths by their ANSI-stripped match text.
+    let mut input = String::new();
+    let mut paths_by_text = HashMap::new();
+    for (path, meta) in files {
+        let name = path.file_name().unwrap_or_default().to_string_lossy();
+        let time = format_time(meta);
+        let title = title(path);
+        let _ = writeln!(input, "{} {} {}", time.blue(), title.bold(), name.dimmed());
+        paths_by_text.insert(format!("{time} {title} {name}"), path.clone());
+    }
 
-    let paths: Vec<_> = files.iter().map(|(p, _)| p.clone()).collect();
+    let preview_paths = paths_by_text.clone();
     let options = SkimOptionsBuilder::default()
         .height("100%".to_string())
         .multi(false)
@@ -115,8 +117,8 @@ fn interactive(command: &str, files: &[(PathBuf, Metadata)]) -> Result<()> {
         .preview_fn(PreviewCallback::from(move |items: Vec<Arc<dyn SkimItem>>| {
             items
                 .first()
-                .and_then(|item| paths.get(item.get_index()))
-                .and_then(|path| std::fs::read_to_string(path).ok())
+                .and_then(|item| preview_paths.get(item.text().as_ref()))
+                .and_then(|path| read_to_string(path).ok())
                 .map(|content| content.lines().map(String::from).collect())
                 .unwrap_or_default()
         }))
@@ -129,7 +131,7 @@ fn interactive(command: &str, files: &[(PathBuf, Metadata)]) -> Result<()> {
     let output = Skim::run_with(options, Some(items)).map_err(|e| anyhow!("Skim failed: {e}"))?;
 
     if let Some(item) = output.selected_items.first().filter(|_| !output.is_abort)
-        && let Some((path, _)) = files.get(item.get_index())
+        && let Some(path) = paths_by_text.get(item.text().as_ref())
     {
         open(command, path)?;
     }
@@ -144,28 +146,25 @@ fn main() -> Result<()> {
         return open(&args.command, path);
     }
 
-    let base = match args.dir {
-        Some(dir) => {
-            ensure!(
-                dir.is_dir(),
-                "Directory not found: {}. Please specify a valid directory with --dir.",
-                dir.display()
-            );
-            dir
+    let base = if let Some(dir) = args.dir {
+        ensure!(
+            dir.is_dir(),
+            "Directory not found: {}. Please specify a valid directory with --dir.",
+            dir.display()
+        );
+        dir
+    } else {
+        let dir = plans_dir()?;
+        if !dir.is_dir() {
+            create_dir_all(&dir).with_context(|| {
+                format!(
+                    "Plans directory {} does not exist and could not be created. \
+                     Use --dir to specify a different directory.",
+                    dir.display()
+                )
+            })?;
         }
-        None => {
-            let dir = plans_dir()?;
-            if !dir.is_dir() {
-                std::fs::create_dir_all(&dir).with_context(|| {
-                    format!(
-                        "Plans directory {} does not exist and could not be created. \
-                         Use --dir to specify a different directory.",
-                        dir.display()
-                    )
-                })?;
-            }
-            dir
-        }
+        dir
     };
     let files = markdown_files(&base)?;
 
